@@ -9,19 +9,11 @@ const ffmpegPath = require("ffmpeg-static");
 ffmpeg.setFfmpegPath(ffmpegPath);
 
 const app = express();
-const PORT = process.env.PORT ?? 4455;
+const PORT = process.env.PORT || 4455;
 
 // Output folder
 const OUTPUT_DIR = path.join(__dirname, "processed");
 if (!fs.existsSync(OUTPUT_DIR)) fs.mkdirSync(OUTPUT_DIR);
-
-// Static mapping for songs (example)
-const SONGS_MAP = {
-  "0": path.join(__dirname, "songs", "placeholder-music.mp3"),
-  "1": path.join(__dirname, "songs", "placeholder-music2.mp3"),
-  "2": path.join(__dirname, "songs", "placeholder-music3.mp3"),
-  "3": path.join(__dirname, "songs", "placeholder-music4.mp3"),
-};
 
 // Serve processed videos as static
 app.use("/processed", express.static(OUTPUT_DIR));
@@ -37,13 +29,17 @@ app.post("/share", upload, async (req, res) => {
     const videoFile = req.file;
     if (!videoFile) return res.status(400).json({ error: "❌ Missing video" });
 
-    const songId = req.body.songId;
+    const songPath = req.body.songId; // now the client sends the path directly
     const musicStart = parseFloat(req.body.musicIntervalSelectedStartTime) || 0;
     const musicEnd = parseFloat(req.body.musicIntervalSelectedEndTime) || 0;
 
-    const audioFilePath = SONGS_MAP[songId];
-    if (songId && (!audioFilePath || !fs.existsSync(audioFilePath))) {
-      return res.status(400).json({ error: "❌ Invalid songId" });
+    // Resolve song path if provided
+    let audioFilePath = null;
+    if (songPath) {
+      audioFilePath = path.join(__dirname, songPath);
+      if (!fs.existsSync(audioFilePath)) {
+        return res.status(400).json({ error: "❌ Invalid song path" });
+      }
     }
 
     // Create dedicated folder for this process
@@ -55,7 +51,11 @@ app.post("/share", upload, async (req, res) => {
     const thumbnailPath = path.join(processFolder, "thumbnail.jpg");
 
     // Respond immediately
-    res.json({ message: "✅ Ok, processing started", folder: `vibe_${timestamp}` });
+    res.json({
+      message: "✅ Ok, processing started",
+      folder: `vibe_${timestamp}`,
+      song: songPath || null, // return the path
+    });
 
     // Probe video metadata
     ffmpeg.ffprobe(videoFile.path, (err, metadata) => {
@@ -64,7 +64,8 @@ app.post("/share", upload, async (req, res) => {
         return;
       }
 
-      const { width, height } = metadata.streams.find((s) => s.width && s.height) || {};
+      const { width, height } =
+        metadata.streams.find((s) => s.width && s.height) || {};
       console.log(`📏 Video resolution: ${width}x${height}`);
 
       // Generate thumbnail automatically at 1 second
@@ -73,7 +74,7 @@ app.post("/share", upload, async (req, res) => {
           timestamps: ["1"],
           filename: "thumbnail.jpg",
           folder: processFolder,
-          size: "320x?"
+          size: "320x?",
         })
         .on("end", () => console.log("🖼️ Thumbnail generated:", thumbnailPath))
         .on("error", (err) => console.error("❌ Thumbnail error:", err));
@@ -93,7 +94,7 @@ app.post("/share", upload, async (req, res) => {
         ffmpegCommand = ffmpegCommand.size("?x1080");
       }
 
-      if (songId) {
+      if (audioFilePath) {
         ffmpegCommand = ffmpegCommand
           .input(audioFilePath)
           .inputOptions([`-ss ${musicStart}`, `-to ${musicEnd}`])
@@ -108,7 +109,9 @@ app.post("/share", upload, async (req, res) => {
           console.log("✅ FFmpeg finished, removing temp upload");
           fs.unlinkSync(videoFile.path);
 
-          const publicUrl = `${req.protocol}://${req.get("host")}/processed/vibe_${timestamp}/index.m3u8`;
+          const publicUrl = `${req.protocol}://${req.get(
+            "host"
+          )}/processed/vibe_${timestamp}/index.m3u8`;
           console.log(`🎉 Processing completed successfully`);
           console.log(`🌍 Accessible at: ${publicUrl}`);
         })
@@ -124,9 +127,9 @@ app.post("/share", upload, async (req, res) => {
 // GET /videos → list processed videos with thumbnails
 app.get("/videos", (req, res) => {
   try {
-    const folders = fs.readdirSync(OUTPUT_DIR).filter((f) =>
-      fs.lstatSync(path.join(OUTPUT_DIR, f)).isDirectory()
-    );
+    const folders = fs
+      .readdirSync(OUTPUT_DIR)
+      .filter((f) => fs.lstatSync(path.join(OUTPUT_DIR, f)).isDirectory());
 
     const baseUrl = `${req.protocol}://${req.get("host")}/processed`;
 
@@ -152,5 +155,5 @@ app.get("/videos", (req, res) => {
 });
 
 app.listen(PORT, () =>
-  console.log(`🌐 Server running on http://192.168.11.101:4455:${PORT}`)
+  console.log(`🌐 Server running on ${PORT}`)
 );
