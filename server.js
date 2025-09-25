@@ -5,8 +5,11 @@ const path = require("path");
 const fs = require("fs");
 const ffmpeg = require("fluent-ffmpeg");
 const ffmpegPath = require("ffmpeg-static");
+const ffprobePath = require("ffprobe-static");
 
+// tell fluent-ffmpeg where to find both binaries
 ffmpeg.setFfmpegPath(ffmpegPath);
+ffmpeg.setFfprobePath(ffprobePath.path);
 
 const app = express();
 const PORT = process.env.PORT || 4455;
