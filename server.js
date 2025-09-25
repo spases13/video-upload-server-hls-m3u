@@ -86,15 +86,15 @@ app.post("/share", upload, async (req, res) => {
       let ffmpegCommand = ffmpeg(videoFile.path)
         .videoCodec("libx264")
         .outputOptions([
-          "-preset veryfast",
-          "-crf 23",
+          "-preset ultrafast",
+          "-crf 28",
           "-hls_time 5",
           "-hls_playlist_type vod",
-        ]);
+        ])  .size("?x720");          // cap at 720p
 
       if (width > 1920 || height > 1080) {
         console.log("📉 Downscaling video to HD (1920x1080)");
-        ffmpegCommand = ffmpegCommand.size("?x1080");
+        ffmpegCommand = ffmpegCommand.size("?x720");
       }
 
       if (audioFilePath) {
